@@ -49,7 +49,7 @@ nix profile install github:rucadi/njq
 ## Usage
 
 ```
-Usage: njq [--raw] [--nix] <nix_expr> [json_file]
+Usage: njq [--escaped] [--nix] <nix_expr> [json_file]
 
   --escaped        Print output with JSON escapes
   --nix        Treat <nix_expr> as a self‑contained expression (skip JSON input)
