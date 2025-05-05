@@ -1,10 +1,10 @@
 [package]
-name = "libtvix"
+name = "libsnix"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["staticlib"]
 
 [dependencies]
 lazy_static = "1.4"
