@@ -5,8 +5,8 @@ use std::process;
 use tvix_eval::{Evaluation, Value};
 
 fn print_usage(prog: &str) {
-    eprintln!("Usage: {} [--raw] [--nix] <nix_expr> [json_file]", prog);
-    eprintln!("  --raw        Print output without JSON escapes");
+    eprintln!("Usage: {} [--escaped] [--nix] <nix_expr> [json_file]", prog);
+    eprintln!("  --escaped        Print output without JSON escapes");
     eprintln!("  --nix        Treat <nix_expr> as a self-contained expression (skip JSON input)");
     eprintln!("  <nix_expr>   The Nix expression to evaluate (quoted)");
     eprintln!("  [json_file]  Path to JSON input file; if omitted, reads from stdin");
@@ -87,12 +87,12 @@ fn evaluate_to_value(code: &str) -> Option<Value> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     let prog = args.get(0).unwrap_or(&"program".to_string()).clone();
-    let mut raw = false;
+    let mut raw = true;
     let mut nix_only = false;
     let mut positional = Vec::new();
     for arg in args.iter().skip(1) {
         match arg.as_str() {
-            "--raw" => raw = true,
+            "--escaped" => raw = false,
             "--nix" => nix_only = true,
             "help" | "--help" | "-h" => print_usage(&prog),
             _ => positional.push(arg.clone()),
@@ -124,7 +124,7 @@ fn main() {
         let nix_json = nix_string_literal(&json);
         format!("builtins.fromJSON ({})", nix_json)
     };
-    let full_code = format!("with builtins; {}", code_expr);
+    let full_code = format!("with builtins; toJSON ({})", code_expr);
     let input_val = match evaluate_to_value(&input_expr) {
         Some(val) => val,
         None => {

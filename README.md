@@ -1,2 +1,134 @@
+Pensó durante un par de segundos
+
+
 # njq
-Command-line JSON processor using nix as query language
+
+`njq` (Nix JQ) lets you use Nix as a lightweight query language for JSON data. 
+It parses JSON into a Nix "builtin" named `input`, evaluates your Nix expression, and prints the result of it.
+
+It uses [Snix](https://snix.dev/) as nix implementation, altough slightly modified to support windows.
+
+---
+
+## Features
+
+* **Arbitrary Nix expressions** over JSON data
+* `--raw` mode to print unescaped strings
+* `--nix` mode to evaluate a self‑contained Nix expression (ignore JSON input)
+* Read JSON from a file or from standard input
+
+---
+
+## Installation
+
+```bash
+
+# build locally
+git clone https://github.com/yourusername/njq.git
+cd njq
+cargo build --release
+# The binary will be at target/release/njq
+
+download it from release section on github
+
+
+use nix:
+
+nix profile install github:rucadi/njq
+```
+
+---
+
+## Usage
+
+```
+Usage: njq [--raw] [--nix] <nix_expr> [json_file]
+
+  --raw        Print output without JSON escapes
+  --nix        Treat <nix_expr> as a self‑contained expression (skip JSON input)
+  <nix_expr>   The Nix expression to evaluate (quote it!)
+  [json_file]  Path to JSON input file; if omitted, reads from stdin
+  help         Show this help message
+```
+
+* **`<nix_expr>`** is evaluated with:
+
+  ```nix
+  with builtins;
+  <nix_expr>
+  ```
+* The JSON input is made available as the Nix variable `input`.
+* By default, JSON input is read from `json_file` or from `stdin`.
+* In `--nix` mode, no JSON is read and `input` is `null`.
+
+---
+
+## Examples
+
+Assume a file `data.json`:
+
+```json
+{
+  "users": [
+    { "name": "Alice", "age": 30 },
+    { "name": "Bob",   "age": 25 }
+  ]
+}
+```
+
+1. **Select all names:**
+
+   ```bash
+   cat data.json \
+     | njq 'map (u: u.name) input.users'
+   ```
+
+   ```json
+   ["Alice","Bob"]
+   ```
+
+2. **Filter by age:**
+
+   ```bash
+   njq 'filter (u: u.age > 27) input.users' data.json
+   ```
+
+   ```json
+   [{ "name": "Alice", "age": 30 }]
+   ```
+
+3. **Raw string output:**
+
+   ```bash
+   echo '"Hello\nNix!"' \
+     | njq --raw 'input'
+   ```
+
+   ```
+   Hello
+   Nix!
+   ```
+
+4. **Pure Nix expression (no JSON):**
+
+   ```bash
+   njq --nix 'builtins.length [1 2 3 4]'
+   ```
+
+   ```json
+   4
+   ```
+
+---
+
+## Development
+
+* Built in Rust using [`tvix_eval`](https://crates.io/crates/tvix_eval) for Nix evaluation.
+* Contributions and bug‑reports welcome!
+* Please open issues or pull requests on GitHub.
+
+---
+
+## License
+
+MIT / Apache‑2.0
