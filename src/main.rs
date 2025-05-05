@@ -125,8 +125,6 @@ fn main() {
         format!("builtins.fromJSON ({})", nix_json)
     };
     let full_code = format!("with builtins; {}", code_expr);
-    println!("{}", full_code);
-    println!("{}", input_expr);
     let input_val = match evaluate_to_value(&input_expr) {
         Some(val) => val,
         None => {
