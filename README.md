@@ -10,6 +10,10 @@ It uses [Snix](https://snix.dev/) as nix implementation, altough slightly modifi
 
 All the heavy-weight is done by Snix, njq interfaces Snix to provide this functionality.
 
+You can check the available builtins for nix here: https://nix.dev/manual/nix/2.24/language/builtins.html
+
+
+
 ---
 
 ## Features
