@@ -2,6 +2,6 @@
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "njq";
   version = "0.1";
-  cargoHash = "sha256-TI6m0sjg+2VHXNmbJIn0pRfOUKE4nms9DuH9/XZ3Wqw=";
+  cargoHash = "sha256-CQnNvImlaUiSEZYOqv6wjF7dGruE7/4IWlzE5nHf5u8=";
   src = pkgs.lib.cleanSource ./.;
 }

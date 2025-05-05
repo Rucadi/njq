@@ -6,7 +6,7 @@ use tvix_eval::{Evaluation, Value};
 
 fn print_usage(prog: &str) {
     eprintln!("Usage: {} [--escaped] [--nix] <nix_expr> [json_file]", prog);
-    eprintln!("  --escaped        Print output without JSON escapes");
+    eprintln!("  --escaped        Print output with JSON escapes");
     eprintln!("  --nix        Treat <nix_expr> as a self-contained expression (skip JSON input)");
     eprintln!("  <nix_expr>   The Nix expression to evaluate (quoted)");
     eprintln!("  [json_file]  Path to JSON input file; if omitted, reads from stdin");
@@ -112,6 +112,11 @@ fn main() {
         "null".to_string()
     } else if let Some(file_path) = &file_path {
         let nix_path = file_path.replace('\\', "/");
+        let nix_path = if nix_path.starts_with('/') || nix_path.starts_with("./") {
+            nix_path
+        } else {
+            format!("./{}", nix_path)
+        };
         format!("builtins.fromJSON (builtins.readFile {})", nix_path)
     } else {
         let json = match slurp_stdin() {
@@ -160,5 +165,41 @@ fn main() {
         }
     } else {
         println!("{}", out_str);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_nix_string_literal() {
+        assert_eq!(nix_string_literal("hello"), "\"hello\"");
+        assert_eq!(nix_string_literal("hello\nworld"), "\"hello\\nworld\"");
+        assert_eq!(nix_string_literal("quote\"backslash\\"), "\"quote\\\"backslash\\\\\"");
+        assert_eq!(nix_string_literal("\r\t"), "\"\\r\\t\"");
+    }
+
+    #[test]
+    fn test_unescape_json() {
+        assert_eq!(unescape_json("hello").unwrap(), "hello");
+        assert_eq!(unescape_json("hello\\nworld").unwrap(), "hello\nworld");
+        assert_eq!(unescape_json("quote\\\"backslash\\\\").unwrap(), "quote\"backslash\\");
+        assert_eq!(unescape_json("\\u0041").unwrap(), "A");
+        assert_eq!(unescape_json("\\u00E9").unwrap(), "é");
+        assert!(unescape_json("\\uGGGG").is_err());
+        assert!(unescape_json("\\uD800").is_err()); // Invalid surrogate
+    }
+
+    #[test]
+    fn test_evaluate_to_value() {
+        // Simple Nix expression
+        let result = evaluate_to_value("42");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().to_string(), "42");
+
+        // Invalid Nix expression
+        let result = evaluate_to_value("invalid + syntax");
+        assert!(result.is_none());
     }
 }
