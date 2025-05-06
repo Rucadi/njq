@@ -1,7 +1,7 @@
 {
   description = "Rust project using Cargo with Nix flake";
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable"; 
+    nixpkgs.url =  "github:NixOS/nixpkgs/e1c2e701296453fe2b46b2824db0a92cb310b311"; 
     flake-utils.url = "github:numtide/flake-utils";
   };
 
