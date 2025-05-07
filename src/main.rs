@@ -24,13 +24,13 @@ mod custom_builtins {
                     .add_parent_env_vars()
                     .build()
                     .unwrap();
-    
+
                 let pipeline = ctx
                     .eval_raw(s.to_str().unwrap(), embed_nu::PipelineData::empty())
                     .unwrap();
-    
+
                 let result = pipeline.into_value(nu_protocol::Span::unknown()).unwrap();
-    
+
                 let output_string = match result {
                     nu_protocol::Value::Int { val, .. } => val.to_string(),
                     nu_protocol::Value::Float { val, .. } => val.to_string(),
@@ -43,7 +43,7 @@ mod custom_builtins {
                         .join(", "),
                     other => other.into_string().unwrap_or("<unknown>".into()),
                 };
-    
+
                 Ok(Value::String(NixString::from(output_string)))
             }
             _ => Err(ErrorKind::TypeError {
@@ -54,13 +54,10 @@ mod custom_builtins {
     }
 }
 
-
-
 fn print_usage(prog: &str) {
     eprintln!("Usage: {} [--escaped] [--nix] [--indent] <nix_expr> [json_file]", prog);
-    eprintln!("  --escaped        Print output with JSON escapes");
     eprintln!("  --nix            Treat <nix_expr> as a self-contained expression (skip JSON input)");
-    eprintln!("  --indent         Pretty-print JSON output with 2-space indentation");
+    eprintln!("  --pretty         Pretty-print JSON output with 2-space indentation");
     eprintln!("  <nix_expr>       The Nix expression to evaluate (quoted)");
     eprintln!("  [json_file]      Path to JSON input file; if omitted, reads from stdin");
     eprintln!("  help             Show this help message");
@@ -73,36 +70,29 @@ fn slurp_stdin() -> io::Result<String> {
     Ok(buffer)
 }
 
-pub fn test_fn(s: &str) -> String {
-    format!("Called Rust with: {}", s)
-}
-
-
-fn printEvalErrors(result: &snix_eval::EvaluationResult, source_map: &snix_eval::SourceCode )
-{
+fn print_eval_errors(result: &snix_eval::EvaluationResult, source_map: &snix_eval::SourceCode) {
     if !result.errors.is_empty() {
-        // Handle and display all errors
         for error in &result.errors {
             eprintln!("Error: {}", error);
         }
     }
-    
     if !result.warnings.is_empty() {
-        // Handle and display all warnings (optional)
         for warning in &result.warnings {
-            eprintln!("Warning: {}", warning.fancy_format_str(&source_map));
+            eprintln!("Warning: {}", warning.fancy_format_str(source_map));
         }
     }
-
 }
+
 fn evaluate_to_value(code: &str) -> Option<Value> {
-    let cwd = env::current_dir().unwrap_or_else(|_| "/".into()).to_string_lossy().into_owned();
+    let cwd = env::current_dir()
+        .unwrap_or_else(|_| "/".into())
+        .to_string_lossy()
+        .into_owned();
     let evaluator = Evaluation::builder_impure().build();
     let source_map = evaluator.source_map();
     let result = evaluator.evaluate(code, Some(cwd.into()));
     
-    printEvalErrors(&result, &source_map);
-
+    print_eval_errors(&result, &source_map);
     result.value
 }
 
@@ -111,12 +101,12 @@ fn main() {
     let prog = args.get(0).unwrap_or(&"program".to_string()).clone();
     let mut nix_only = false;
     let mut pretty = false;
-    let mut positional = Vec::new();
+    let mut positional = Vec::with_capacity(2); // Typically 1 or 2 positional args
 
     for arg in args.iter().skip(1) {
         match arg.as_str() {
-            "--nix"     => nix_only = true,
-            "--pretty"  => pretty = true,
+            "--nix" => nix_only = true,
+            "--pretty" => pretty = true,
             "help" | "--help" | "-h" => print_usage(&prog),
             _ => positional.push(arg.clone()),
         }
@@ -127,7 +117,6 @@ fn main() {
         print_usage(&prog);
     }
 
-    let code_expr = &positional[0];
     let file_path = positional.get(1).cloned();
 
     // Prepare the JSON input expression for Nix
@@ -142,58 +131,66 @@ fn main() {
         };
         format!("builtins.fromJSON (builtins.readFile {})", nix_path)
     } else {
-        // Read raw JSON from stdin and re-serialize to ensure valid quoting
-        let raw_json = slurp_stdin().unwrap_or_else(|e| { eprintln!("Error reading stdin: {}", e); process::exit(1); });
-        // Validate and quote via serde_json
-        let js_val: JsonValue = serde_json::from_str(&raw_json)
-            .unwrap_or_else(|e| { eprintln!("Invalid JSON input: {}", e); process::exit(1); });
+        let raw_json = slurp_stdin().unwrap_or_else(|e| {
+            eprintln!("Error reading stdin: {}", e);
+            process::exit(1);
+        });
+        let js_val: JsonValue = serde_json::from_str(&raw_json).unwrap_or_else(|e| {
+            eprintln!("Invalid JSON input: {}", e);
+            process::exit(1);
+        });
         let compact = serde_json::to_string(&js_val).unwrap();
         format!("builtins.fromJSON ('{}')", compact)
     };
 
-    // Build the Nix expression to JSON
-    let full_code: String = format!("with builtins; toJSON ({})", code_expr);
+    // Build the Nix expression to JSON, inlining code_expr
+    let full_code = format!("with builtins; toJSON ({})", &positional[0]);
 
-    let input_val = evaluate_to_value(&input_expr)
-        .unwrap_or_else(|| { eprintln!("Evaluation of input_expr failed."); process::exit(1); });
+    let input_val = evaluate_to_value(&input_expr).unwrap_or_else(|| {
+        eprintln!("Evaluation of input_expr failed.");
+        process::exit(1);
+    });
 
     let builder = Evaluation::builder_impure()
         .add_builtins([("input", input_val)])
         .add_builtins(custom_builtins::builtins());
     let evaluator = builder.build();
-    let cwd = env::current_dir().unwrap_or_else(|_| "/".into()).to_string_lossy().into_owned();
+    let cwd = env::current_dir()
+        .unwrap_or_else(|_| "/".into())
+        .to_string_lossy()
+        .into_owned();
     let source_map = evaluator.source_map();
     let result = evaluator.evaluate(&full_code, Some(cwd.into()));
-    printEvalErrors(&result, &source_map);
+    print_eval_errors(&result, &source_map);
 
-
-    let out_str = result.value
-        .map(|v| v.to_string())
-        .unwrap_or_else(|| { eprintln!("Evaluation failed or returned null."); process::exit(1); });
-
+    let out_str = result.value.map(|v| v.to_string()).unwrap_or_else(|| {
+        eprintln!("Evaluation failed or returned null.");
+        process::exit(1);
+    });
     let out_str: String = serde_json::from_str(&out_str).unwrap();
-    let json_val: JsonValue = serde_json::from_str(&out_str)
-            .unwrap_or_else(|e| { eprintln!("Internal JSON parse error: {}", e); process::exit(1) });
+
+
     if pretty {
+        let json_val: JsonValue = serde_json::from_str(&out_str).unwrap_or_else(|e| {
+            eprintln!("Invalid JSON output: {}", e);
+            process::exit(1);
+        });
         println!("{}", serde_json::to_string_pretty(&json_val).unwrap());
     } else {
-        // just print the compact text directly
         println!("{}", out_str);
-    } 
+    }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_evaluate_to_value() {
-        // Simple Nix expression
         let result = evaluate_to_value("42");
         assert!(result.is_some());
         assert_eq!(result.unwrap().to_string(), "42");
 
-        // Invalid Nix expression
         let result = evaluate_to_value("invalid + syntax");
         assert!(result.is_none());
     }
