@@ -18,7 +18,7 @@ You can check the available builtins for nix here: https://nix.dev/manual/nix/2.
 ## Features
 
 * **Arbitrary Nix expressions** over JSON data
-* `--escaped` mode to print escaped strings
+* `--pretty` print code in a readable way
 * `--nix` mode to evaluate a self‑contained Nix expression (ignore JSON input)
 * Read JSON from a file or from standard input
 * builtins.* already available without requiring to write builtin for each function

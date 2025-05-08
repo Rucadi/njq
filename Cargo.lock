@@ -397,6 +397,7 @@ dependencies = [
  "assert_cmd",
  "lazy_static",
  "predicates",
+ "serde_json",
  "snix-eval",
  "tempfile",
 ]
