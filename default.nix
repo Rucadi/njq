@@ -3,7 +3,7 @@
   }) {}
 }:pkgs.rustPlatform.buildRustPackage rec {
   pname = "njq";
-  version = "0.1";
-  cargoHash = "sha256-Hhard2mukdWpYGCO0Sr3MmFiNL/bga2PskWp87Cv0bE=";
+  version = "0.0.2";
+  cargoHash = "sha256-Z4whDevtbS1cmkrgdASmTTJbGANPaQWJODK9djgp2QY=";
   src = pkgs.lib.cleanSource ./.;
 }
