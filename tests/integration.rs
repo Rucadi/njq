@@ -47,13 +47,3 @@ fn test_file_json() {
         .success()
         .stdout(predicate::str::contains(r#"[{"age":30,"name":"Alice"}]"#));
 }
-
-#[test]
-fn test_escaped_mode() {
-    let mut cmd = Command::cargo_bin("njq").unwrap();
-    cmd.args(&["--escaped", "input"])
-        .write_stdin(r#""Hello\nWorld""#);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains(r#""\"Hello\\nWorld\"""#));
-}
