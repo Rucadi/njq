@@ -49,9 +49,9 @@ nix profile install github:rucadi/njq
 ## Usage
 
 ```
-Usage: njq [--escaped] [--nix] <nix_expr> [json_file]
+Usage: njq [--pretty] [--nix] <nix_expr> [json_file]
 
-  --escaped        Print output with JSON escapes
+  --pretty     Pretty print the json to a readable format
   --nix        Treat <nix_expr> as a self‑contained expression (skip JSON input)
   <nix_expr>   The Nix expression to evaluate (quote it!)
   [json_file]  Path to JSON input file; if omitted, reads from stdin
