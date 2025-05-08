@@ -92,7 +92,7 @@ fn main() {
             process::exit(1);
         });
         let compact = serde_json::to_string(&js_val).unwrap();
-        format!("builtins.fromJSON ('{}')", compact)
+        format!("builtins.fromJSON (''{}'')", compact.replace("''", "'''"))
     };
 
     // Build the Nix expression to JSON, inlining code_expr
