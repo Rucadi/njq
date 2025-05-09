@@ -91,10 +91,10 @@ fn read_file_or_exit(path: &str, desc: &str) -> String {
 /// Normalize file path for Nix (make it absolute or prefixed with ./)
 fn normalize_path(path: &str) -> String {
     let p = path.replace('\\', "/");
-    if p.starts_with('/') || p.starts_with("./") {
+    if p.starts_with('/') || p.starts_with("./") || p.starts_with("../") {
         p
     } else {
-        format!("{}", p)
+        format!("./{}", p)
     }
 }
 
