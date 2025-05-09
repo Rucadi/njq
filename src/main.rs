@@ -69,7 +69,6 @@ fn main() {
         (format!("builtins.fromJSON (builtins.readFile ({}))", path), Some(tmp))
     };
 
-    println!("{}", input_expr);
     // Evaluate input JSON to a Nix value
     let input_val = evaluate_to_value(&input_expr).unwrap_or_else(|| exit_err("input JSON evaluation failed"));
 
