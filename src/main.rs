@@ -63,10 +63,13 @@ fn main() {
         (format!("builtins.fromJSON (builtins.readFile \"{}\")", path), None)
     } else {
         let (path, tmp) = write_temp_json().unwrap_or_else(|e| exit_err(&format!("Failed to prepare JSON: {}", e)));
-        let dif = pathdiff::diff_paths(path, env::current_dir().unwrap()).unwrap();
-        (format!("builtins.fromJSON (builtins.readFile ({}))", dif.to_string_lossy()), Some(tmp))
+        let path = pathdiff::diff_paths(path, env::current_dir().unwrap()).unwrap();
+        let path = path.to_string_lossy();
+        let path = normalize_path(&path);
+        (format!("builtins.fromJSON (builtins.readFile ({}))", path), Some(tmp))
     };
 
+    println!("{}", input_expr);
     // Evaluate input JSON to a Nix value
     let input_val = evaluate_to_value(&input_expr).unwrap_or_else(|| exit_err("input JSON evaluation failed"));
 
@@ -92,7 +95,7 @@ fn normalize_path(path: &str) -> String {
     if p.starts_with('/') || p.starts_with("./") {
         p
     } else {
-        format!("./{}", p)
+        format!("{}", p)
     }
 }
 
