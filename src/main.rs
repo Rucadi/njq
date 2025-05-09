@@ -1,148 +1,144 @@
-use std::env;
-use std::io;
-use std::io::Read;
-use std::process;
-use snix_eval::{Evaluation, Value};
+use clap::Parser;
+use colored_json::ToColoredJson;
 use serde_json::Value as JsonValue;
+use snix_eval::{Evaluation, Value};
+use std::env;
+use std::io::IsTerminal;
+use std::io::{self, Read};
+use std::process;
+use std::str;
+/// A small CLI to evaluate Nix expressions with optional JSON input
+#[derive(Parser, Debug)]
+#[clap(
+    name = "njq",
+    version,
+    author,
+    about = "A small CLI to query json or nix dictionaries using Nix Expressions ",
+    override_usage = "njq [OPTIONS] <EXPR> [FILE]",
+    after_help = "\
+    The input file (or stdin) should contain:\n\
+    - JSON data, if --nix is not provided.\n\
+    - A Nix expression that evaluates to an attribute set, if --nix is provided.\n\n\
+    EXAMPLES:\n\
+        # Evaluate a Nix expression with JSON input from stdin\n\
+        echo '{\"key\": \"value\"}' | njq 'input.key'\n\n\
+        # Evaluate a Nix expression with JSON input from a file\n\
+        njq 'input.key' input.json\n\n\
+        # Evaluate a Nix expression with another Nix expression as input\n\
+        njq --nix 'input.attr' nix_file.nix"
+)]
+struct Opt {
+    /// Evaluate a Nix expression from a file or stdin
+    #[clap(long = "nix", short = 'n', value_name = "NIX_EXPR")]
+    nix: bool,
 
+    /// Pretty-print JSON output with 2-space indentation
+    #[clap(long)]
+    compact: bool,
 
-fn print_usage(prog: &str) {
-    eprintln!("Usage: {} [--nix] [--pretty] <nix_expr> [json_file]", prog);
-    eprintln!("  --nix            Treat <nix_expr> as a self-contained expression (skip JSON input)");
-    eprintln!("  --pretty         Pretty-print JSON output with 2-space indentation");
-    eprintln!("  <nix_expr>       The Nix expression to evaluate (quoted)");
-    eprintln!("  [json_file]      Path to JSON input file; if omitted, reads from stdin");
-    eprintln!("  help             Show this help message");
-    process::exit(1);
+    /// The Nix expression to evaluate (quoted)
+    #[clap(value_name = "EXPR")]
+    query_expression: Option<String>,
+
+    /// Path to JSON input file; if omitted, reads from stdin
+    #[clap(value_name = "JSON_OR_NIX_FILE")]
+    file_path: Option<String>,
 }
 
-fn slurp_stdin() -> io::Result<String> {
-    let mut buffer = String::new();
-    io::stdin().read_to_string(&mut buffer)?;
-    Ok(buffer)
-}
-
-fn print_eval_errors(result: &snix_eval::EvaluationResult, source_map: &snix_eval::SourceCode) {
-    if !result.errors.is_empty() {
-        for error in &result.errors {
-            eprintln!("Error: {}", error);
-        }
-    }
-    if !result.warnings.is_empty() {
-        for warning in &result.warnings {
-            eprintln!("Warning: {}", warning.fancy_format_str(source_map));
-        }
-    }
-}
-
-fn evaluate_to_value(code: &str) -> Option<Value> {
-    let cwd = env::current_dir()
-        .unwrap_or_else(|_| "/".into())
-        .to_string_lossy()
-        .into_owned();
-    let evaluator = Evaluation::builder_impure().build();
-    let source_map = evaluator.source_map();
-    let result = evaluator.evaluate(code, Some(cwd.into()));
-    
-    print_eval_errors(&result, &source_map);
-    result.value
+fn nix_attr_set_from_json(s: &str) -> Option<Value> {
+    serde_json::from_str(s).ok()
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let prog = args.get(0).unwrap_or(&"program".to_string()).clone();
-    let mut nix_only = false;
-    let mut pretty = false;
-    let mut positional = Vec::with_capacity(2); // Typically 1 or 2 positional args
+    let opt = Opt::parse();
 
-    for arg in args.iter().skip(1) {
-        match arg.as_str() {
-            "--nix" => nix_only = true,
-            "--pretty" => pretty = true,
-            "help" | "--help" | "-h" => print_usage(&prog),
-            _ => positional.push(arg.clone()),
-        }
-    }
-
-    if positional.is_empty() {
-        eprintln!("Error: Missing <nix_expr>.");
-        print_usage(&prog);
-    }
-
-    let file_path = positional.get(1).cloned();
-
-    // Prepare the JSON input expression for Nix
-    let input_expr = if nix_only {
-        "null".to_string()
-    } else if let Some(fp) = file_path {
-        let nix_path = fp.replace('\\', "/");
-        let nix_path = if nix_path.starts_with('/') || nix_path.starts_with("./") {
-            nix_path
+    let query_expression = opt.query_expression.as_deref().unwrap_or_else(|| {
+        if !std::io::stdin().is_terminal() {
+            "input"
         } else {
-            format!("./{}", nix_path)
-        };
-        format!("builtins.fromJSON (builtins.readFile {})", nix_path)
+            let mut cmd = <Opt as clap::CommandFactory>::command();
+            cmd.print_help().unwrap();
+            process::exit(0);
+        }
+    });
+
+    let file_content = if opt.file_path.is_some() {
+        let path = opt.file_path.unwrap();
+        std::fs::read_to_string(path).unwrap_or_else(|_| {
+            exit_err("failed to read file, unexistent or invalid path");
+        })
     } else {
-        let raw_json = slurp_stdin().unwrap_or_else(|e| {
-            eprintln!("Error reading stdin: {}", e);
-            process::exit(1);
-        });
-        let js_val: JsonValue = serde_json::from_str(&raw_json).unwrap_or_else(|e| {
-            eprintln!("Invalid JSON input: {}", e);
-            process::exit(1);
-        });
-        let compact = serde_json::to_string(&js_val).unwrap();
-        format!("builtins.fromJSON (''{}'')", compact.replace("''", "'''"))
+        let mut raw = String::new();
+        io::stdin().read_to_string(&mut raw).unwrap();
+        raw
     };
 
-    // Build the Nix expression to JSON, inlining code_expr
-    let full_code = format!("with builtins; toJSON ({})", &positional[0]);
-
-    let input_val = evaluate_to_value(&input_expr).unwrap_or_else(|| {
-        eprintln!("Evaluation of input json failed.");
-        process::exit(1);
-    });
-
-    let builder = Evaluation::builder_impure()
-        .add_builtins([("input", input_val)]);
-    let evaluator = builder.build();
-    let cwd = env::current_dir()
-        .unwrap_or_else(|_| "/".into())
-        .to_string_lossy()
-        .into_owned();
-    let source_map = evaluator.source_map();
-    let result = evaluator.evaluate(&full_code, Some(cwd.into()));
-    print_eval_errors(&result, &source_map);
-
-    let out_str = result.value.map(|v| v.to_string()).unwrap_or_else(|| {
-        eprintln!("Evaluation failed or returned null.");
-        process::exit(1);
-    });
-    let out_str: String = serde_json::from_str(&out_str).unwrap();
-
-
-    if pretty {
-        let json_val: JsonValue = serde_json::from_str(&out_str).unwrap_or_else(|e| {
-            eprintln!("Invalid JSON output: {}", e);
-            process::exit(1);
-        });
-        println!("{}", serde_json::to_string_pretty(&json_val).unwrap());
+    let attr_set = if opt.nix {
+        evaluate_with_input(&file_content, Value::Null)
+            .unwrap_or_else(|| exit_err("evaluation failed"))
     } else {
-        println!("{}", out_str);
+        nix_attr_set_from_json(&file_content)
+            .unwrap_or_else(|| exit_err("failed to parse JSON input"))
+    };
+
+    let full_code = format!("with builtins; toJSON ({})", query_expression);
+    let result =
+        evaluate_with_input(&full_code, attr_set).unwrap_or_else(|| exit_err("evaluation failed"));
+    let raw = result.to_string();
+    let json_value: JsonValue = serde_json::from_str(&raw)
+        .unwrap_or_else(|e| exit_err(&format!("invalid JSON output: {}", e)));
+
+    let json_value_final = serde_json::from_str(&json_value.as_str().unwrap())
+        .map_err(|e| format!("Invalid JSON output: {}", e))
+        .unwrap();
+
+    print_output(&json_value_final, opt.compact);
+}
+
+/// Evaluate main expression with `input` bound and return the result
+fn evaluate_with_input(code: &str, input: Value) -> Option<Value> {
+    let evaluator = Evaluation::builder_impure()
+        .add_builtins([("input", input)])
+        .build();
+    let source_map = evaluator.source_map();
+    let cwd = env::current_dir().unwrap_or_else(|_| "/".into());
+    let res = evaluator.evaluate(code, Some(cwd));
+    for err in &res.errors {
+        eprintln!("Error: {}", err);
+    }
+    for warn in &res.warnings {
+        eprintln!("Warning: {}", warn.fancy_format_str(&source_map));
+    }
+    res.value
+}
+
+/// Print the final JSON result (pretty or compact)
+
+fn print_output(json: &JsonValue, compact: bool) {
+    match json {
+        JsonValue::String(s) => println!("{}", s),
+        _ => {
+            let json_string = if compact {
+                serde_json::to_string(json)
+            } else {
+                serde_json::to_string_pretty(json)
+            };
+
+            match json_string {
+                Ok(s) => {
+                    match s.to_colored_json_auto() {
+                        Ok(colored) => println!("{}", colored),
+                        Err(_) => println!("{}", s), // Fallback to plain JSON string
+                    }
+                }
+                Err(e) => eprintln!("Failed to serialize JSON: {}", e),
+            }
+        }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_evaluate_to_value() {
-        let result = evaluate_to_value("42");
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().to_string(), "42");
-
-        let result = evaluate_to_value("invalid + syntax");
-        assert!(result.is_none());
-    }
+/// Print an error and exit
+fn exit_err(msg: &str) -> ! {
+    eprintln!("Error: {}", msg);
+    process::exit(1);
 }
