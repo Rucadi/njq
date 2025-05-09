@@ -1,97 +1,207 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
-use std::io::Write;
 use std::fs::write;
+use std::io::Write;
 use tempfile::NamedTempFile;
 
-#[test]
-fn test_nix_mode() {
-    let mut cmd = Command::cargo_bin("njq").unwrap();
-    cmd.args(&["--nix", "builtins.length [1 2 3 4]"]);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("4"));
-}
+
 
 #[test]
-fn test_stdin_json() {
-    let mut cmd = Command::cargo_bin("njq").unwrap();
-    cmd.args(&["map (u: u.name) input.users"])
-        .write_stdin(r#"{"users": [{"name": "Alice"}, {"name": "Bob"}]}"#);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains(r#"["Alice","Bob"]"#));
-}
-
-#[test]
-fn test_file_json() {
+fn test_normal_mode_json_file() {
     let mut file = NamedTempFile::new().unwrap();
     writeln!(
         file,
-        r#"{{ "users": [{{ "name": "Alice", "age": 30 }}, {{ "name": "Bob", "age": 25 }}] }}"#
+        r#"{{"numbers": [1, 2, 3], "greeting": "hello"}}"#
     )
     .unwrap();
 
     let mut cmd = Command::cargo_bin("njq").unwrap();
-    cmd.args(&["filter (u: u.age > 27) input.users", file.path().to_str().unwrap()]);
+    cmd.args(&["input.numbers", file.path().to_str().unwrap()]);
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains(r#"[{"age":30,"name":"Alice"}]"#));
+        .stdout(predicate::str::contains("[
+  1,
+  2,
+  3
+]"));
 }
 
 #[test]
-fn test_nix_file_expr() {
-    let expr = "map (x: x * 2) input.values";
-    let file = NamedTempFile::new().unwrap();
-    write(file.path(), expr).unwrap();
-
-    let mut data = NamedTempFile::new().unwrap();
-    writeln!(data, r#"{{"values": [1, 2, 3]}}"#).unwrap();
-
+fn test_normal_mode_json_stdin() {
     let mut cmd = Command::cargo_bin("njq").unwrap();
-    cmd.args(&["--nix-file", file.path().to_str().unwrap(), data.path().to_str().unwrap()]);
+    cmd.args(&["input.numbers"])
+        .write_stdin(r#"{"numbers": [1, 2, 3]}"#);
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("[2,4,6]"));
+        .stdout(predicate::str::contains("[
+  1,
+  2,
+  3
+]"));
 }
 
+
 #[test]
-fn test_pretty_output() {
+fn test_normal_mode_nix_file() {
+    let nix_file = NamedTempFile::new().unwrap();
+    write(nix_file.path(), "[1 2 3]").unwrap();
+
     let mut cmd = Command::cargo_bin("njq").unwrap();
-    cmd.args(&["--pretty", "input"])
-        .write_stdin(r#"{"hello":"world","x":[1,2]}"#);
+    cmd.args(&["input", "--nix", nix_file.path().to_str().unwrap()]);
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("{\n  \"hello\": \"world\""));
+        .stdout(predicate::str::contains("[
+  1,
+  2,
+  3
+]"));
 }
 
 #[test]
-fn test_missing_expr_error() {
+fn test_normal_mode_nix_file_with_expr() {
+    let nix_file = NamedTempFile::new().unwrap();
+    write(nix_file.path(), "[1 2 3]").unwrap();
+
     let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&[
+        "map (x: x * 2) input",
+        "--nix",
+        nix_file.path().to_str().unwrap(),
+    ]);
     cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("USAGE"));
+        .success()
+        .stdout(predicate::str::contains("[
+  2,
+  4,
+  6
+]"));
 }
 
 #[test]
-fn test_invalid_json_input() {
-    let mut cmd = Command::cargo_bin("njq").unwrap();
-    cmd.args(&["input.foo"])
-        .write_stdin(r#"{ invalid json "#);
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Failed to prepare JSON"));
-}
-
-#[test]
-fn test_null_json_when_nix_file() {
-    let expr = "input == null";
+fn test_normal_mode_invalid_expr() {
     let mut file = NamedTempFile::new().unwrap();
-    write(file.path(), expr).unwrap();
+    writeln!(file, r#"{{"key": "value"}}"#).unwrap();
 
     let mut cmd = Command::cargo_bin("njq").unwrap();
-    cmd.args(&["--nix-file", file.path().to_str().unwrap()]);
+    cmd.args(&["invalid", file.path().to_str().unwrap()]);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("evaluation failed"));
+}
+
+#[test]
+fn test_normal_mode_missing_json_file() {
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["input", "nonexistent.json"]);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("failed to read file"));
+}
+
+#[test]
+fn test_normal_mode_invalid_json_file() {
+    let mut file = NamedTempFile::new().unwrap();
+    writeln!(file, r#"{{key: value}}"#).unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["input", file.path().to_str().unwrap()]);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Error: failed to parse JSON input\n"));
+}
+
+#[test]
+fn test_normal_mode_invalid_json_stdin() {
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["input"])
+        .write_stdin(r#"{{key: value}}"#);
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("Error: failed to parse JSON input\n"));
+}
+
+#[test]
+fn test_normal_mode_string_output() {
+    let mut file = NamedTempFile::new().unwrap();
+    writeln!(
+        file,
+        r#"{{"numbers": [1, 2, 3], "greeting": "hello"}}"#
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&[r#"input.greeting"#, file.path().to_str().unwrap()]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("hello"));
+}
+
+#[test]
+fn test_normal_mode_json_string_output() {
+    let mut file = NamedTempFile::new().unwrap();
+    writeln!(
+        file,
+        r#"{{"numbers": [1, 2, 3], "greeting": "hello"}}"#
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&[
+        r#"builtins.toJSON { a = 1; }"#, 
+        file.path().to_str().unwrap(),
+    ]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(r#"{"a":1}"#));
+}
+
+#[test]
+fn test_normal_mode_number_output() {
+    let mut file = NamedTempFile::new().unwrap();
+    writeln!(
+        file,
+        r#"{{"numbers": [1, 2, 3], "greeting": "hello"}}"#
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["42", file.path().to_str().unwrap()]).unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["42", file.path().to_str().unwrap()]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("42"));
+}
+
+#[test]
+fn test_normal_mode_boolean_output() {
+    let mut file = NamedTempFile::new().unwrap();
+    writeln!(
+        file,
+        r#"{{"numbers": [1, 2, 3], "greeting": "hello"}}"#
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["true", file.path().to_str().unwrap()]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("true"));
+}
+
+#[test]
+fn test_normal_mode_null_output() {
+    let mut file = NamedTempFile::new().unwrap();
+    writeln!(
+        file,
+        r#"{{"numbers": [1, 2, 3], "greeting": "hello"}}"#
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["null", file.path().to_str().unwrap()]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("null"));
 }
