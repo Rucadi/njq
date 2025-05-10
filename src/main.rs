@@ -82,17 +82,17 @@ fn main() {
     };
 
     let full_code = format!("with builtins; toJSON ({})", query_expression);
-    let result =
-        evaluate_with_input(&full_code, attr_set).unwrap_or_else(|| exit_err("evaluation failed"));
-    let raw = result.to_string().replace("\\$", "$");
-    let json_value: JsonValue = serde_json::from_str(&raw)
+    let raw_result =
+        evaluate_with_input(&full_code, attr_set).unwrap_or_else(|| exit_err("Evaluation failed"));
+
+    let json_string = match raw_result {
+        Value::String(s) => s,
+        _ => exit_err("Evaluation must return a JSON string"),
+    };
+
+    let json_value: JsonValue = serde_json::from_str(&json_string.as_str().unwrap())
         .unwrap_or_else(|e| exit_err(&format!("invalid JSON output: {}", e)));
-
-    let json_value_final = serde_json::from_str(&json_value.as_str().unwrap())
-        .map_err(|e| format!("Invalid JSON output: {}", e))
-        .unwrap();
-
-    print_output(&json_value_final, opt.compact);
+    print_output(&json_value, opt.compact);
 }
 
 /// Evaluate main expression with `input` bound and return the result
@@ -100,6 +100,7 @@ fn evaluate_with_input(code: &str, input: Value) -> Option<Value> {
     let evaluator = Evaluation::builder_impure()
         .add_builtins([("input", input)])
         .build();
+
     let source_map = evaluator.source_map();
     let cwd = env::current_dir().unwrap_or_else(|_| "/".into());
     let res = evaluator.evaluate(code, Some(cwd));
@@ -119,7 +120,7 @@ fn print_output(json: &JsonValue, compact: bool) {
         JsonValue::String(s) => println!("{}", s),
         _ => {
             if compact {
-                println!("{}", json);
+                println!("Now here {}", json);
                 return;
             }
 

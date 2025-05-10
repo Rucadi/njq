@@ -120,7 +120,8 @@ fn test_normal_mode_invalid_expr() {
     cmd.args(&["invalid", file.path().to_str().unwrap()]);
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("evaluation failed"));
+        .stderr(predicate::str::contains("Error: while evaluating this Nix code
+Error: Evaluation failed"));
 }
 
 #[test]
