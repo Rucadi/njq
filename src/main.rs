@@ -120,7 +120,7 @@ fn print_output(json: &JsonValue, compact: bool) {
         JsonValue::String(s) => println!("{}", s),
         _ => {
             if compact {
-                println!("Now here {}", json);
+                println!("{}", json);
                 return;
             }
 
