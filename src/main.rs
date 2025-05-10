@@ -118,12 +118,12 @@ fn print_output(json: &JsonValue, compact: bool) {
     match json {
         JsonValue::String(s) => println!("{}", s),
         _ => {
-            let json_string = if compact {
-                serde_json::to_string(json)
-            } else {
-                serde_json::to_string_pretty(json)
-            };
+            if compact {
+                println!("{}", json);
+                return;
+            } 
 
+            let json_string = serde_json::to_string_pretty(json);
             match json_string {
                 Ok(s) => {
                     match s.to_colored_json_auto() {
