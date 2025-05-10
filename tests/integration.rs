@@ -26,6 +26,40 @@ fn test_normal_mode_json_file() {
 ]"));
 }
 
+
+#[test]
+fn test_normal_mode_json_file_compact() {
+    let mut file = NamedTempFile::new().unwrap();
+    writeln!(
+        file,
+        r#"{{"numbers": [1, 2, 3], "greeting": "hello"}}"#
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["input.numbers", file.path().to_str().unwrap(), "--compact"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("[1,2,3]"));
+}
+
+
+#[test]
+fn test_normal_mode_json_file_dollar() {
+    let mut file = NamedTempFile::new().unwrap();
+    writeln!(
+        file,
+        r#"{{"numbers": [1, 2, 3], "greeting": "he${{hooho}}llo"}}"#
+    )
+    .unwrap();
+
+    let mut cmd = Command::cargo_bin("njq").unwrap();
+    cmd.args(&["input.greeting", file.path().to_str().unwrap(), "--compact"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("he${hooho}llo"));
+}
+
 #[test]
 fn test_normal_mode_json_stdin() {
     let mut cmd = Command::cargo_bin("njq").unwrap();

@@ -84,7 +84,7 @@ fn main() {
     let full_code = format!("with builtins; toJSON ({})", query_expression);
     let result =
         evaluate_with_input(&full_code, attr_set).unwrap_or_else(|| exit_err("evaluation failed"));
-    let raw = result.to_string();
+    let raw = result.to_string().replace("\\$", "$");
     let json_value: JsonValue = serde_json::from_str(&raw)
         .unwrap_or_else(|e| exit_err(&format!("invalid JSON output: {}", e)));
 
@@ -121,7 +121,7 @@ fn print_output(json: &JsonValue, compact: bool) {
             if compact {
                 println!("{}", json);
                 return;
-            } 
+            }
 
             let json_string = serde_json::to_string_pretty(json);
             match json_string {
