@@ -107,6 +107,11 @@ fn evaluate_with_input(code: &str, input: Value) -> Option<Value> {
     for err in &res.errors {
         eprintln!("Error: {}", err);
     }
+
+    if res.errors.is_empty() && env::var("NJQ_DEBUG").is_err() {
+        return res.value;
+    }
+
     for warn in &res.warnings {
         eprintln!("Warning: {}", warn.fancy_format_str(&source_map));
     }
