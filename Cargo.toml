@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 lazy_static = "1.4"
-snix-eval = { git = "https://github.com/Rucadi/snix", package = "snix-eval" }
+snix-eval = { git = "https://github.com/Rucadi/snix", branch = "nushell", package = "snix-eval" }
 serde_json = "1.0.140"
 tempfile = "3.13.0"
 clap = { version = "4.5.37", features = ["derive"] }
